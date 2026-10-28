@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Life Tracker · 侘寂生活誌</title>
+
+  <!-- iOS 主畫面獨立 App (PWA) 標籤 -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="生活誌">
+  <link rel="apple-touch-icon" href="https://img.icons8.com/isometric/512/compass.png">
+
+  <!-- Tailwind CSS & Lucide Icons -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    /* 侘寂質感配色與排版 */
+    :root {
+      --bg-wabi: #F5F2EB;       /* 溫潤燕麥米 */
+      --card-wabi: #FAF8F5;     /* 亞麻米白 */
+      --border-wabi: #E6E1D8;   /* 泥灰線條 */
+      --clay: #B86548;          /* 陶土赤紅 */
+      --moss: #687A65;          /* 苔蘚灰綠 */
+      --bark: #3F3B36;          /* 深灰樹皮字 */
+      --stone: #87827A;         /* 卵石灰 */
+    }
+
+    body {
+      background-color: var(--bg-wabi);
+      color: var(--bark);
+      padding-top: max(env(safe-area-inset-top), 1.2rem);
+      padding-bottom: max(env(safe-area-inset-bottom), 2.5rem);
+      -webkit-tap-highlight-color: transparent;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang TC", "Noto Sans TC", sans-serif;
+    }
+
+    /* 運動標籤點選狀態 */
+    .tag-active {
+      background-color: var(--clay) !important;
+      color: #FFFFFF !important;
+      border-color: var(--clay) !important;
+      box-shadow: 0 2px 6px rgba(184, 101, 72, 0.25);
+    }
+
+    /* 飲食營養素點選狀態 */
+    .nutrient-active {
+      background-color: var(--moss) !important;
+      color: #FFFFFF !important;
+      border-color: var(--moss) !important;
+      font-weight: 600;
+    }
+
+    .wabi-card {
+      background-color: var(--card-wabi);
+      border: 1px solid var(--border-wabi);
+      box-shadow: 0 4px 16px -2px rgba(90, 80, 70, 0.04);
+    }
+
+    input::placeholder, textarea::placeholder {
+      color: #A8A29A;
+    }
+  </style>
+</head>
+<body class="min-h-screen px-4 max-w-md mx-auto selection:bg-[#B86548] selection:text-white">
+
+  <!-- 頂部日期與狀態 -->
+  <header class="py-3.5 border-b border-[#E6E1D8] flex items-center justify-between">
+    <div>
+      <span class="text-xs text-[#87827A] font-mono tracking-wider">WABI-SABI LOG · 靜謐生活</span>
+      <h1 class="text-lg font-medium text-[#2E2B27] flex items-center gap-2 mt-0.5">
+        今日節奏 <span class="w-2 h-2 rounded-full bg-[#687A65]"></span>
+      </h1>
+    </div>
+    <div class="flex items-center space-x-2">
+      <button onclick="exportData()" class="p-2 rounded-xl bg-[#EDE8DE] text-[#635E57] hover:text-[#2E2B27] transition text-xs flex items-center gap-1 border border-[#DFD9CD]">
+        <i data-lucide="download" class="w-3.5 h-3.5"></i>
+        <span>備份</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- 模組 1：體重目標與水/咖啡計數 -->
+  <section class="mt-4 grid grid-cols-2 gap-3">
+    <!-- 體重監控 -->
+    <div class="wabi-card rounded-2xl p-3.5 flex flex-col justify-between">
+      <div class="flex items-center justify-between text-xs text-[#87827A]">
+        <span>目前 / 目標體重</span>
+        <i data-lucide="scale" class="w-3.5 h-3.5 text-[#A8A29A]"></i>
+      </div>
+      <div class="flex items-baseline space-x-1 my-1.5">
+        <input type="number" step="0.1" id="currentWeight" placeholder="72.5" onchange="calcWeightDiff()" class="w-14 bg-transparent text-xl font-medium font-mono text-[#2E2B27] focus:outline-none border-b border-[#D8D2C5]">
+        <span class="text-xs text-[#A8A29A]">/</span>
+        <input type="number" step="0.1" id="targetWeight" placeholder="70.0" onchange="calcWeightDiff()" class="w-12 bg-transparent text-sm font-mono text-[#87827A] focus:outline-none border-b border-[#E6E1D8]">
+        <span class="text-xs text-[#87827A]">kg</span>
+      </div>
+      <div class="text-[11px] text-[#87827A] font-mono" id="weightDiffText">距離目標：-- kg</div>
+    </div>
+
+    <!-- 水分與咖啡 -->
+    <div class="wabi-card rounded-2xl p-3.5 flex flex-col justify-between">
+      <div class="flex justify-between items-center text-xs text-[#87827A]">
+        <span>水與咖啡</span>
+        <i data-lucide="coffee" class="w-3.5 h-3.5 text-[#B86548]"></i>
+      </div>
+      <div class="flex justify-around items-center my-1.5">
+        <button onclick="addWater(250)" class="flex flex-col items-center active:scale-95 transition">
+          <span class="text-base font-semibold font-mono text-[#4A7A8C]" id="waterCount">0 ml</span>
+          <span class="text-[10px] text-[#87827A] mt-0.5">+250ml 水</span>
+        </button>
+        <div class="h-6 w-px bg-[#E6E1D8]"></div>
+        <button onclick="addCoffee()" class="flex flex-col items-center active:scale-95 transition">
+          <span class="text-base font-semibold font-mono text-[#9C6644]" id="coffeeCount">0 杯</span>
+          <span class="text-[10px] text-[#87827A] mt-0.5">+1 杯咖啡</span>
+        </button>
+      </div>
+      <button onclick="resetDrinks()" class="text-[10px] text-[#A8A29A] hover:text-[#635E57] text-center">重置計數</button>
+    </div>
+  </section>
+
+  <!-- 模組 2：運動與動態記錄 -->
+  <section class="mt-4 wabi-card rounded-2xl p-4 space-y-3">
+    <div class="flex justify-between items-center">
+      <h2 class="text-sm font-medium text-[#2E2B27] flex items-center gap-1.5">
+        <i data-lucide="activity" class="w-4 h-4 text-[#B86548]"></i> 運動動態
+      </h2>
+      <div class="flex items-center gap-1.5 text-xs text-[#87827A]">
+        <span>體脂</span>
+        <input type="number" step="0.1" id="inputFat" placeholder="%" class="w-12 bg-[#EDE8DE] border border-[#DFD9CD] rounded-lg px-1.5 py-0.5 text-center font-mono text-[#2E2B27] focus:outline-none">
+      </div>
+    </div>
+
+    <!-- 週次快速點選 -->
+    <div class="flex justify-between gap-1 text-xs">
+      <button onclick="selectWeekday(this)" class="w-8 h-8 rounded-lg bg-[#EDE8DE] text-[#635E57] hover:bg-[#E2DDD2] day-btn transition">一</button>
+      <button onclick="selectWeekday(this)" class="w-8 h-8 rounded-lg bg-[#B86548] text-white day-btn transition font-medium">二</button>
+      <button onclick="selectWeekday(this)" class="w-8 h-8 rounded-lg bg-[#EDE8DE] text-[#635E57] hover:bg-[#E2DDD2] day-btn transition">三</button>
+      <button onclick="selectWeekday(this)" class="w-8 h-8 rounded-lg bg-[#EDE8DE] text-[#635E57] hover:bg-[#E2DDD2] day-btn transition">四</button>
+      <button onclick="selectWeekday(this)" class="w-8 h-8 rounded-lg bg-[#EDE8DE] text-[#635E57] hover:bg-[#E2DDD2] day-btn transition">五</button>
+      <button onclick="selectWeekday(this)" class="w-8 h-8 rounded-lg bg-[#EDE8DE] text-[#635E57] hover:bg-[#E2DDD2] day-btn transition">六</button>
+      <button onclick="selectWeekday(this)" class="w-8 h-8 rounded-lg bg-[#EDE8DE] text-[#635E57] hover:bg-[#E2DDD2] day-btn transition">日</button>
+    </div>
+
+    <!-- 運動項目標籤 -->
+    <div class="flex flex-wrap gap-1.5 pt-1">
+      <span onclick="toggleTag(this)" class="tag px-2.5 py-1 rounded-lg bg-[#EDE8DE] border border-[#DFD9CD] text-xs text-[#635E57] cursor-pointer transition">胸部訓練</span>
+      <span onclick="toggleTag(this)" class="tag px-2.5 py-1 rounded-lg bg-[#EDE8DE] border border-[#DFD9CD] text-xs text-[#635E57] cursor-pointer transition">背部訓練</span>
+      <span onclick="toggleTag(this)" class="tag px-2.5 py-1 rounded-lg bg-[#EDE8DE] border border-[#DFD9CD] text-xs text-[#635E57] cursor-pointer transition">腿部推拉</span>
+      <span onclick="toggleTag(this)" class="tag px-2.5 py-1 rounded-lg bg-[#EDE8DE] border border-[#DFD9CD] text-xs text-[#635E57] cursor-pointer transition">手臂二頭</span>
+      <span onclick="toggleTag(this)" class="tag px-2.5 py-1 rounded-lg bg-[#EDE8DE] border border-[#DFD9CD] text-xs text-[#635E57] cursor-pointer transition">有氧爬坡</span>
+      <span onclick="toggleTag(this)" class="tag px-2.5 py-1 rounded-lg bg-[#EDE8DE] border border-[#DFD9CD] text-xs text-[#635E57] cursor-pointer transition">網球</span>
+      <span onclick="toggleTag(this)" class="tag px-2.5 py-1 rounded-lg bg-[#EDE8DE] border border-[#DFD9CD] text-xs text-[#635E57] cursor-pointer transition">羽球</span>
+      <span onclick="toggleTag(this)" class="tag px-2.5 py-1 rounded-lg bg-[#EDE8DE] border border-[#DFD9CD] text-xs text-[#635E57] cursor-pointer transition">潛水</span>
+      <span onclick="toggleTag(this)" class="tag px-2.5 py-1 rounded-lg bg-[#EDE8DE] border border-[#DFD9CD] text-xs text-[#635E57] cursor-pointer transition">游泳</span>
+      <span onclick="toggleTag(this)" class="tag px-2.5 py-1 rounded-lg bg-[#EDE8DE] border border-[#DFD9CD] text-xs text-[#635E57] cursor-pointer transition">慢跑</span>
+    </div>
+
+    <!-- 運動細節備註（語音直接輸入） -->
+    <input type="text" id="workoutNote" placeholder="點此用語音：深蹲80kg 4組、打球1.5小時..." class="w-full bg-[#EDE8DE] border border-[#DFD9CD] rounded-xl px-3 py-2 text-xs text-[#2E2B27] placeholder-[#A8A29A] focus:outline-none focus:border-[#B86548] transition">
+  </section>
+
+  <!-- 模組 3：三餐與四大營養素 -->
+  <section class="mt-4 wabi-card rounded-2xl p-4 space-y-3">
+    <div class="flex justify-between items-center">
+      <h2 class="text-sm font-medium text-[#2E2B27] flex items-center gap-1.5">
+        <i data-lucide="utensils" class="w-4 h-4 text-[#687A65]"></i> 飲食紀律
+      </h2>
+      <span class="text-[11px] text-[#87827A]">點選營養素快速打卡</span>
+    </div>
+
+    <!-- 早餐 -->
+    <div class="p-3 bg-[#F5F2EB] border border-[#E6E1D8] rounded-xl space-y-1.5">
+      <div class="flex justify-between items-center">
+        <span class="text-xs font-medium text-[#4A453E]">🍳 早餐</span>
+        <div class="flex gap-1 text-[11px]">
+          <span onclick="toggleNutrient(this)" class="px-2 py-0.5 rounded border border-[#DFD9CD] bg-[#EDE8DE] text-[#87827A] cursor-pointer transition">蛋</span>
+          <span onclick="toggleNutrient(this)" class="px-2 py-0.5 rounded border border-[#DFD9CD] bg-[#EDE8DE] text-[#87827A] cursor-pointer transition">澱</span>
+          <span onclick="toggleNutrient(this)" class="px-2 py-0.5 rounded border border-[#DFD9CD] bg-[#EDE8DE] text-[#87827A] cursor-pointer transition">菜</span>
+          <span onclick="toggleNutrient(this)" class="px-2 py-0.5 rounded border border-[#DFD9CD] bg-[#EDE8DE] text-[#87827A] cursor-pointer transition">油</span>
+        </div>
+      </div>
+      <input type="text" id="mealBreakfast" placeholder="語音/文字：燕麥、水煮蛋2顆、黑咖啡..." class="w-full bg-transparent text-xs text-[#2E2B27] placeholder-[#A8A29A] focus:outline-none border-b border-[#E6E1D8] pb-1">
+    </div>
+
+    <!-- 午餐 -->
+    <div class="p-3 bg-[#F5F2EB] border border-[#E6E1D8] rounded-xl space-y-1.5">
+      <div class="flex justify-between items-center">
+        <span class="text-xs font-medium text-[#4A453E]">🍱 午餐</span>
+        <div class="flex gap-1 text-[11px]">
+          <span onclick="toggleNutrient(this)" class="px-2 py-0.5 rounded border border-[#DFD9CD] bg-[#EDE8DE] text-[#87827A] cursor-pointer transition">蛋</span>
+          <span onclick="toggleNutrient(this)" class="px-2 py-0.5 rounded border border-[#DFD9CD] bg-[#EDE8DE] text-[#87827A] cursor-pointer transition">澱</span>
+          <span onclick="toggleNutrient(this)" class="px-2 py-0.5 rounded border border-[#DFD9CD] bg-[#EDE8DE] text-[#87827A] cursor-pointer transition">菜</span>
+          <span onclick="toggleNutrient(this)" class="px-2 py-0.5 rounded border border-[#DFD9CD] bg-[#EDE8DE] text-[#87827A] cursor-pointer transition">油</span>
+        </div>
+      </div>
+      <input type="text" id="mealLunch" placeholder="語音/文字：雞胸肉便當、花椰菜、白飯半碗..." class="w-full bg-transparent text-xs text-[#2E2B27] placeholder-[#A8A29A] focus:outline-none border-b border-[#E6E1D8] pb-1">
+    </div>
+
+    <!-- 晚餐 -->
+    <div class="p-3 bg-[#F5F2EB] border border-[#E6E1D8] rounded-xl space-y-1.5">
+      <div class="flex justify-between items-center">
+        <span class="text-xs font-medium text-[#4A453E]">🍲 晚餐</span>
+        <div class="flex gap-1 text-[11px]">
+          <span onclick="toggleNutrient(this)" class="px-2 py-0.5 rounded border border-[#DFD9CD] bg-[#EDE8DE] text-[#87827A] cursor-pointer transition">蛋</span>
+          <span onclick="toggleNutrient(this)" class="px-2 py-0.5 rounded border border-[#DFD9CD] bg-[#EDE8DE] text-[#87827A] cursor-pointer transition">澱</span>
+          <span onclick="toggleNutrient(this)" class="px-2 py-0.5 rounded border border-[#DFD9CD] bg-[#EDE8DE] text-[#87827A] cursor-pointer transition">菜</span>
+          <span onclick="toggleNutrient(this)" class="px-2 py-0.5 rounded border border-[#DFD9CD] bg-[#EDE8DE] text-[#87827A] cursor-pointer transition">油</span>
+        </div>
+      </div>
+      <input type="text" id="mealDinner" placeholder="語音/文字：煎鮭魚、大碗沙拉、橄欖油..." class="w-full bg-transparent text-xs text-[#2E2B27] placeholder-[#A8A29A] focus:outline-none border-b border-[#E6E1D8] pb-1">
+    </div>
+  </section>
+
+  <!-- 模組 4：職涯探索與可遷移能力 -->
+  <section class="mt-4 wabi-card rounded-2xl p-4 space-y-2.5">
+    <div class="flex justify-between items-center">
+      <h2 class="text-sm font-medium text-[#2E2B27] flex items-center gap-1.5">
+        <i data-lucide="compass" class="w-4 h-4 text-[#7A6E5D]"></i> 職涯探索與能力積累
+      </h2>
+    </div>
+
+    <div class="space-y-2">
+      <div class="p-2.5 bg-[#F5F2EB] border border-[#E6E1D8] rounded-xl">
+        <span class="text-[11px] text-[#7A6E5D] flex items-center gap-1 mb-1 font-medium">
+          <i data-lucide="lightbulb" class="w-3 h-3 text-[#B86548]"></i> 小型嘗試 / 商業靈感
+        </span>
+        <input type="text" id="projectIdea" placeholder="點此記錄任何微小驗證想法..." class="w-full bg-transparent text-xs text-[#2E2B27] placeholder-[#A8A29A] focus:outline-none">
+      </div>
+
+      <div class="p-2.5 bg-[#F5F2EB] border border-[#E6E1D8] rounded-xl">
+        <span class="text-[11px] text-[#7A6E5D] flex items-center gap-1 mb-1 font-medium">
+          <i data-lucide="pen-tool" class="w-3 h-3 text-[#687A65]"></i> 寫作主題 / 思考外部硬碟
+        </span>
+        <input type="text" id="writingTopic" placeholder="今天沉澱了什麼觀點？想探討什麼議題？" class="w-full bg-transparent text-xs text-[#2E2B27] placeholder-[#A8A29A] focus:outline-none">
+      </div>
+
+      <div class="p-2.5 bg-[#F5F2EB] border border-[#E6E1D8] rounded-xl">
+        <span class="text-[11px] text-[#7A6E5D] flex items-center gap-1 mb-1 font-medium">
+          <i data-lucide="shield" class="w-3 h-3 text-[#87827A]"></i> 帶著走的能力 (Portable Skills)
+        </span>
+        <input type="text" id="portableSkill" placeholder="今天精進了哪個跨領域的能力資產？" class="w-full bg-transparent text-xs text-[#2E2B27] placeholder-[#A8A29A] focus:outline-none">
+      </div>
+    </div>
+  </section>
+
+  <!-- 模組 5：生活心流（DJ & 植物） -->
+  <section class="mt-4 wabi-card rounded-2xl p-4 space-y-2.5">
+    <div class="flex justify-between items-center">
+      <h2 class="text-sm font-medium text-[#2E2B27] flex items-center gap-1.5">
+        <i data-lucide="sparkles" class="w-4 h-4 text-[#B86548]"></i> 興趣與心流
+      </h2>
+      <span class="text-[10px] text-[#87827A]">隨手打卡</span>
+    </div>
+
+    <div class="grid grid-cols-2 gap-2">
+      <!-- DJ -->
+      <div class="p-2.5 bg-[#F5F2EB] border border-[#E6E1D8] rounded-xl space-y-1">
+        <div class="flex items-center justify-between text-xs text-[#4A453E]">
+          <span class="flex items-center gap-1"><i data-lucide="headphones" class="w-3 h-3 text-[#7A6E5D]"></i> DJ 練習</span>
+          <input type="checkbox" id="checkDJ" class="rounded accent-[#B86548]">
+        </div>
+        <input type="text" id="noteDJ" placeholder="對拍/挑歌進度..." class="w-full bg-transparent text-[11px] text-[#2E2B27] placeholder-[#A8A29A] focus:outline-none">
+      </div>
+
+      <!-- 植物 -->
+      <div class="p-2.5 bg-[#F5F2EB] border border-[#E6E1D8] rounded-xl space-y-1">
+        <div class="flex items-center justify-between text-xs text-[#4A453E]">
+          <span class="flex items-center gap-1"><i data-lucide="leaf" class="w-3 h-3 text-[#687A65]"></i> 植物養護</span>
+          <input type="checkbox" id="checkPlant" class="rounded accent-[#687A65]">
+        </div>
+        <input type="text" id="notePlant" placeholder="澆水/換盆/新芽..." class="w-full bg-transparent text-[11px] text-[#2E2B27] placeholder-[#A8A29A] focus:outline-none">
+      </div>
+    </div>
+  </section>
+
+  <!-- 底部固定儲存按鈕 -->
+  <div class="sticky bottom-3 mt-5">
+    <button onclick="saveAll()" class="w-full py-3.5 rounded-2xl bg-[#B86548] hover:bg-[#a3563c] text-white font-medium text-xs shadow-md shadow-[#B86548]/20 flex items-center justify-center gap-1.5 active:scale-[0.99] transition">
+      <i data-lucide="check" class="w-4 h-4"></i>
+      <span>儲存今天的所有紀錄 (本機保存)</span>
+    </button>
+  </div>
+
+  <script>
+    lucide.createIcons();
+
+    function toggleTag(el) { el.classList.toggle('tag-active'); }
+    function toggleNutrient(el) { el.classList.toggle('nutrient-active'); }
+    function selectWeekday(btn) {
+      document.querySelectorAll('.day-btn').forEach(b => {
+        b.classList.remove('bg-[#B86548]', 'text-white', 'font-medium');
+        b.classList.add('bg-[#EDE8DE]', 'text-[#635E57]');
+      });
+      btn.classList.add('bg-[#B86548]', 'text-white', 'font-medium');
+      btn.classList.remove('bg-[#EDE8DE]', 'text-[#635E57]');
+    }
+
+    let water = 0;
+    let coffee = 0;
+    function addWater(ml) {
+      water += ml;
+      document.getElementById('waterCount').innerText = water + ' ml';
+    }
+    function addCoffee() {
+      coffee += 1;
+      document.getElementById('coffeeCount').innerText = coffee + ' 杯';
+    }
+    function resetDrinks() {
+      water = 0; coffee = 0;
+      document.getElementById('waterCount').innerText = '0 ml';
+      document.getElementById('coffeeCount').innerText = '0 杯';
+    }
+
+    function calcWeightDiff() {
+      const cur = parseFloat(document.getElementById('currentWeight').value);
+      const tar = parseFloat(document.getElementById('targetWeight').value);
+      if(!isNaN(cur) && !isNaN(tar)) {
+        const diff = (cur - tar).toFixed(1);
+        const sign = diff > 0 ? `距離目標還有 +${diff} kg` : `已達標！超越 ${Math.abs(diff)} kg`;
+        document.getElementById('weightDiffText').innerText = sign;
+      }
+    }
+
+    function saveAll() {
+      const payload = {
+        date: new Date().toLocaleDateString('zh-TW'),
+        weight: document.getElementById('currentWeight').value,
+        targetWeight: document.getElementById('targetWeight').value,
+        fat: document.getElementById('inputFat').value,
+        water: water,
+        coffee: coffee,
+        workoutNote: document.getElementById('workoutNote').value,
+        breakfast: document.getElementById('mealBreakfast').value,
+        lunch: document.getElementById('mealLunch').value,
+        dinner: document.getElementById('mealDinner').value,
+        projectIdea: document.getElementById('projectIdea').value,
+        writingTopic: document.getElementById('writingTopic').value,
+        portableSkill: document.getElementById('portableSkill').value,
+        djDone: document.getElementById('checkDJ').checked,
+        djNote: document.getElementById('noteDJ').value,
+        plantDone: document.getElementById('checkPlant').checked,
+        plantNote: document.getElementById('notePlant').value
+      };
+
+      localStorage.setItem('wabi_tracker_today', JSON.stringify(payload));
+
+      const btn = event.currentTarget;
+      const originalText = btn.innerHTML;
+      btn.innerHTML = `<i data-lucide="check" class="w-4 h-4"></i> <span>已靜謐保存</span>`;
+      lucide.createIcons();
+      setTimeout(() => { btn.innerHTML = originalText; lucide.createIcons(); }, 1800);
+    }
+
+    function exportData() {
+      const raw = localStorage.getItem('wabi_tracker_today') || '{}';
+      const blob = new Blob([raw], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `wabi-log-${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+    }
+  </script>
+</body>
+</html>
